@@ -249,6 +249,49 @@ func createRoom(w http.ResponseWriter, r *http.Request) {
 }
 
 
+func joinRoom(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var roomData struct {
+		Name     string `json:"name"`
+		Password string `json:"password"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&roomData)
+	if err != nil {
+		http.Error(w, "Ошибка при декодировании запроса: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Попытка присоединиться к комнате: %s", roomData.Name)
+
+	var storedHash string
+	err = db.QueryRow("SELECT password FROM rooms WHERE name = $1", roomData.Name).Scan(&storedHash)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Комната не найдена", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Ошибка получения данных: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if roomData.Password != storedHash { // Здесь нужно сравнивать хэшированный пароль
+		http.Error(w, "Неверный пароль", http.StatusUnauthorized)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Успешное присоединение"})
+}
+
+func serveRoom(w http.ResponseWriter, r *http.Request) {
+    http.ServeFile(w, r, "D:/projects/webDocuments/Client/room.html") 
+}
+
 
 func main() {
 	initDB()                     
@@ -261,7 +304,9 @@ func main() {
 	http.HandleFunc("/ws", handleConnection)   // Обработка WebSocket-соединений
 	http.HandleFunc("/account", serveAccount) // Обработка страницы аккаунта
 	http.HandleFunc("/createRoom", createRoom) // Обработка создания комнаты
-    http.HandleFunc("/home", serveHome) // Обработка создания комнаты
+    http.HandleFunc("/home", serveHome) // возвращаемся на первую страницу
+    http.HandleFunc("/joinRoom", joinRoom) // Обработка создания комнаты
+    http.HandleFunc("/room", serveRoom) // Обработка страницы комнаты
 
 	log.Println("Сервер запущен на порту 8080")
 	log.Fatal(http.ListenAndServe(":8080", nil)) // Запуск HTTP-сервера

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Присоединиться к комнате</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        
+        h1 {
+            margin: 20px 0;
+            color: #333;
+        }
+        
+        form {
+            display: flex;
+            flex-direction: column;
+            width: 300px; /* Ширина формы */
+        }
+
+        input {
+            margin: 10px 0; /* Отступы между полями ввода */
+            padding: 10px;
+            border: 1px solid #ccc; /* Рамка полей ввода */
+            border-radius: 4px; /* Скругление углов */
+            font-size: 16px; /* Размер шрифта */
+        }
+
+        .button {
+            background-color: #5cb85c; 
+            color: white; 
+            padding: 15px 30px; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 20px; 
+            transition: background-color 0.3s; 
+            margin-top: 10px; /* Отступ сверху для кнопки */
+            align-self: center; /* Центрируем кнопку по горизонтали */
+        }
+
+        .button:hover {
+            background-color: #4cae4c; 
+        }
+    </style>
+</head>
+<body>
+    <h1>Присоединиться к комнате</h1>
+    <form id="join-room-form">
+        <input type="text" id="roomName" placeholder="Название комнаты" required>
+        <input type="password" id="roomPassword" placeholder="Пароль" required>
+        <button type="submit" class="button">Присоединиться</button>
+    </form>
+    <script>
+        document.getElementById("join-room-form").addEventListener("submit", function(event) {
+            event.preventDefault(); 
+            
+            const roomName = document.getElementById("roomName").value;
+            const roomPassword = document.getElementById("roomPassword").value;
+
+            fetch("/joinRoom", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ name: roomName, password: roomPassword })
+            })
+            .then(response => {
+                if (response.ok) {
+                    alert("Вы успешно присоединились к комнате!");
+                    window.location.href = "http://localhost:8080/room"; // Переход на страницу комнаты
+                } else {
+                    alert("Ошибка при присоединении к комнате!");
+                }
+            })
+            .catch(error => {
+                alert("Ошибка сети: " + error.message);
+            });
+        });
+    </script>
+</body>
+</html>
