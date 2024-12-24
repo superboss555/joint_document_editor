@@ -1,0 +1,104 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+h1 {
+    margin-bottom: 20px;
+    color: #333;
+    margin: 20px;
+}
+
+form {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    width: 300px; /* Ваш желаемый размер формы */
+    text-align: left; /* Выровнять текст и элементы формы по левому краю */
+}
+
+label {
+    margin-top: 10px;
+    display: block;
+    color: #666;
+}
+
+input[type="text"],
+input[type="password"] {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0 20px 0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box; /* Убедитесь, что padding не добавляет ширины */
+}
+
+input[type="submit"] {
+    background-color: #5cb85c;
+    color: white;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 16px;
+}
+
+input[type="submit"]:hover {
+    background-color: #4cae4c; /* Темнее при наведении */
+}
+
+/* Стиль для сообщения об ошибке */
+.error-message {
+    color: red;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+/* Стиль для сообщения об успехе */
+.success-message {
+    color: green;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+.container {
+    display: flex; /* Используем Flexbox */
+    flex-direction: column; /* Размещение в столбик */
+    align-items: center; /* Выравнивание по центру по горизонтали */
+    justify-content: center; /* Выравнивание по центру по вертикали */
+    min-height: 100vh; /* Задать минимальную высоту контейнера на весь экран */
+}
+
+.welcome-message {
+    font-size: 48px; /* Большее количество шрифта */
+    margin-bottom: 30px; /* Отступ снизу для отделения от кнопок */
+    text-align: center; /* Центрирование текста */
+}
+
+/* Общие стили для кнопок */
+.button {
+    background-color: #5cb85c; /* Цвет кнопки */
+    color: white; /* Цвет текста кнопки */
+    padding: 15px 30px; /* Увеличение полей для кнопки */
+    border: none; /* Убираем границы */
+    border-radius: 6px; /* Увеличение закругления углов */
+    cursor: pointer; /* Указатель курсора при наведении */
+    text-decoration: none; /* Убираем подчеркивание */
+    font-size: 20px; /* Увеличение размера шрифта для кнопок */
+    transition: background-color 0.3s; /* Плавный переход цвета фона при наведении */
+    margin: 15px 0; /* Отступ между кнопками */
+    width: 250px; /* Увеличение ширины кнопок */
+    text-align: center; /* Центрирование текста внутри кнопки */
+}
+
+.button:hover {
+    background-color: #4cae4c; /* Темнее при наведении */
+}
