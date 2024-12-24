@@ -29,7 +29,7 @@
 
                 if (response.ok) {
                     alert("Пользователь успешно зарегистрирован.");
-                    window.location.href = "http://localhost:8080/account";
+                    window.location.href = "http://localhost:8080/home";
                 } else {
                     const errorMsg = await response.text();
                     alert("Ошибка регистрации: " + errorMsg);

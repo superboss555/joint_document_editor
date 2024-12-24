@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -29,7 +30,7 @@ type Room struct {
     ID       int    `json:"id"`
     Name     string `json:"name"`
     Password string `json:"password"`
-    Creator  int    `json:"creator" `// ID пользователя, создавшего комнату
+    Creator  int    `json:"creator" `
 }
 
 // initDB инициализация базы данных
@@ -44,11 +45,9 @@ func initDB() {
 	if err = db.Ping(); err != nil {
 		log.Fatal("Ошибка пинга базы данных:", err)
 	}
-
-	createRoomsTable()
 }
 
-// userExists проверяет существование пользователя по email
+
 func userExists(email string) bool {
 	var exists bool
 	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE email=$1)", email).Scan(&exists)
@@ -140,7 +139,7 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
     }
 
     var storedHash string
-    err := db.QueryRow("SELECT password FROM users WHERE email = $1", user.Email).Scan(&storedHash)
+    err := db.QueryRow("SELECT id, password FROM users WHERE email = $1", user.Email).Scan(&user.ID, &storedHash)
     if err != nil {
         if err == sql.ErrNoRows {
             http.Error(w, "Неверный Email или пароль", http.StatusUnauthorized)
@@ -157,14 +156,21 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Если все корректно, возвращаем успешный ответ
+    // Устанавливаем cookie с ID пользователя
+    http.SetCookie(w, &http.Cookie{
+        Name:  "user_id",
+        Value: strconv.Itoa(user.ID), // Преобразуем ID в строку
+        Path:  "/",
+        HttpOnly: true,
+    })
+
     response := map[string]string{"message": "Успешный вход", "redirect": "/account"}
     w.WriteHeader(http.StatusOK)
     json.NewEncoder(w).Encode(response)
 }
 
 
-// handleConnection обрабатывает WebSocket-соединения
+
 func handleConnection(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -189,69 +195,73 @@ func handleConnection(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+
 func serveHome(w http.ResponseWriter, r *http.Request) {
-    http.ServeFile(w, r, "index.html")
+    http.ServeFile(w, r, "D:/projects/webDocuments/Client/index.html")
 }
+
 
 func serveAccount(w http.ResponseWriter, r *http.Request) {
     http.ServeFile(w, r, "D:/projects/webDocuments/Client/account.html") 
 }
 
-
-
-func createRoomsTable() {
-    query := 
-    `CREATE TABLE IF NOT EXISTS rooms (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        creator_id INT NOT NULL,
-        FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE
-    );`
-    
-    _, err := db.Exec(query)
-    if err != nil {
-        log.Fatal("Ошибка создания таблицы комнат:", err)
-    }
-}
-
-// createRoom функция для обработки запроса на создание комнаты
 func createRoom(w http.ResponseWriter, r *http.Request) {
-    if r.Method != http.MethodPost {
-        http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-        return
-    }
+	if r.Method != http.MethodPost {
+		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+		return
+	}
 
-    var room Room
-    err := json.NewDecoder(r.Body).Decode(&room)
-    if err != nil {
-        http.Error(w, "Ошибка при декодировании запроса", http.StatusBadRequest)
-        return
-    }
+	// Извлекаем ID пользователя из cookie
+	cookie, err := r.Cookie("user_id")
+	if err != nil {
+		http.Error(w, "Необходимо войти в систему", http.StatusUnauthorized)
+		return
+	}
 
-    // Вставка новой комнаты в базу данных
-    query := `INSERT INTO rooms (name, password, creator_id) VALUES ($1, $2, $3) RETURNING id`
-    err = db.QueryRow(query, room.Name, room.Password, room.Creator).Scan(&room.ID)
-    if err != nil {
-        http.Error(w, "Ошибка при создании комнаты", http.StatusInternalServerError)
-        return
-    }
+	userID, err := strconv.Atoi(cookie.Value) // Преобразуем значение cookie в int
+	if err != nil {
+		http.Error(w, "Ошибка получения ID пользователя: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-    // Возвращение информации о созданной комнате
-    w.WriteHeader(http.StatusCreated)
-    json.NewEncoder(w).Encode(room)
+	var room Room
+	err = json.NewDecoder(r.Body).Decode(&room)
+	if err != nil {
+		http.Error(w, "Ошибка при декодировании запроса: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	room.Creator = userID // Устанавливаем ID создателя комнаты
+
+	log.Printf("Создание комнаты с именем: %s от пользователя: %d", room.Name, room.Creator) // Логируем имя комнаты и создателя
+
+	query := "INSERT INTO rooms (name, password, creator_id) VALUES ($1, $2, $3) RETURNING id"
+	err = db.QueryRow(query, room.Name, room.Password, room.Creator).Scan(&room.ID)
+	if err != nil {
+		http.Error(w, "Ошибка при создании комнаты: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("Ошибка при создании комнаты: %v", err) // Логируем ошибку
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(room)
 }
+
+
 
 func main() {
 	initDB()                     
 	defer db.Close()             
 
+    clientDir := "../Client"
+    http.Handle("/", http.FileServer(http.Dir(clientDir)))
 	http.HandleFunc("/register", createUser) // Обработка регистрации пользователей
 	http.HandleFunc("/login", loginUser)      // Обработка входа пользователей
-	http.HandleFunc("/", serveHome)            // Обработка главной страницы
 	http.HandleFunc("/ws", handleConnection)   // Обработка WebSocket-соединений
 	http.HandleFunc("/account", serveAccount) // Обработка страницы аккаунта
-	http.HandleFunc("/create-room", createRoom) // Обработка создания комнаты
+	http.HandleFunc("/createRoom", createRoom) // Обработка создания комнаты
+    http.HandleFunc("/home", serveHome) // Обработка создания комнаты
 
 	log.Println("Сервер запущен на порту 8080")
 	log.Fatal(http.ListenAndServe(":8080", nil)) // Запуск HTTP-сервера
