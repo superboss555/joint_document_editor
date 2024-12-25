@@ -33,6 +33,11 @@ type Room struct {
     Creator  int    `json:"creator" `
 }
 
+type JoinRoomRequest struct {
+    Name     string `json:"name" `    // Название комнаты
+    Password string `json:"password"` // Пароль комнаты
+}
+
 // initDB инициализация базы данных
 func initDB() {
 	var err error
@@ -60,8 +65,9 @@ func userExists(email string) bool {
 
 func setCORSHeaders(w http.ResponseWriter) {
     w.Header().Set("Access-Control-Allow-Origin", "*")
-    w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    w.Header().Set("Access-Control-Allow-Credentials", "true")
     w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+    w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 }
 
 func createUser(w http.ResponseWriter, r *http.Request) {
@@ -158,11 +164,14 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
 
     // Устанавливаем cookie с ID пользователя
     http.SetCookie(w, &http.Cookie{
-        Name:  "user_id",
-        Value: strconv.Itoa(user.ID), // Преобразуем ID в строку
-        Path:  "/",
+        Name:     "user_id",
+        Value:    strconv.Itoa(user.ID), // ID преобразован в строку
+        Path:     "/",
         HttpOnly: true,
+        MaxAge:   3600, // Время жизни в секундах
     })
+
+    log.Printf("Cookie установлено: user_id=%d", user.ID)
 
     response := map[string]string{"message": "Успешный вход", "redirect": "/account"}
     w.WriteHeader(http.StatusOK)
@@ -207,90 +216,118 @@ func serveAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func createRoom(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
+    setCORSHeaders(w)
+    if r.Method != http.MethodPost {
+        http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+        return
+    }
 
-	// Извлекаем ID пользователя из cookie
-	cookie, err := r.Cookie("user_id")
-	if err != nil {
-		http.Error(w, "Необходимо войти в систему", http.StatusUnauthorized)
-		return
-	}
+    log.Println("Доступные cookies:")
+    for _, cookie := range r.Cookies() {
+        log.Printf("%s=%s", cookie.Name, cookie.Value)
+    }
 
-	userID, err := strconv.Atoi(cookie.Value) // Преобразуем значение cookie в int
-	if err != nil {
-		http.Error(w, "Ошибка получения ID пользователя: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
+    cookie, err := r.Cookie("user_id")
+    if err != nil {
+        http.Error(w, "Необходимо войти в систему", http.StatusUnauthorized)
+        log.Printf("Ошибка извлечения cookie: %v", err)
+        return
+    }
 
-	var room Room
-	err = json.NewDecoder(r.Body).Decode(&room)
-	if err != nil {
-		http.Error(w, "Ошибка при декодировании запроса: "+err.Error(), http.StatusBadRequest)
-		return
-	}
+    userID, err := strconv.Atoi(cookie.Value) // Преобразование значения cookie в int
+    if err != nil {
+        http.Error(w, "Ошибка получения ID пользователя", http.StatusInternalServerError)
+        log.Printf("Ошибка преобразования cookie в int: %v", err)
+        return
+    }
 
-	room.Creator = userID // Устанавливаем ID создателя комнаты
+    var room Room
+    err = json.NewDecoder(r.Body).Decode(&room)
+    if err != nil {
+        http.Error(w, "Ошибка при декодировании запроса: "+err.Error(), http.StatusBadRequest)
+        return
+    }
 
-	log.Printf("Создание комнаты с именем: %s от пользователя: %d", room.Name, room.Creator) // Логируем имя комнаты и создателя
+    room.Creator = userID // Устанавливаем ID создателя комнаты
 
-	query := "INSERT INTO rooms (name, password, creator_id) VALUES ($1, $2, $3) RETURNING id"
-	err = db.QueryRow(query, room.Name, room.Password, room.Creator).Scan(&room.ID)
-	if err != nil {
-		http.Error(w, "Ошибка при создании комнаты: "+err.Error(), http.StatusInternalServerError)
-		log.Printf("Ошибка при создании комнаты: %v", err) // Логируем ошибку
-		return
-	}
+    log.Printf("Создание комнаты с именем: %s от пользователя: %d", room.Name, room.Creator) // Логируем имя комнаты и создателя
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(room)
+    query := "INSERT INTO rooms (name, password, creator_id) VALUES ($1, $2, $3) RETURNING id"
+    err = db.QueryRow(query, room.Name, room.Password, room.Creator).Scan(&room.ID)
+    if err != nil {
+        http.Error(w, "Ошибка при создании комнаты: "+err.Error(), http.StatusInternalServerError)
+        log.Printf("Ошибка при создании комнаты: %v", err) // Логируем ошибку
+        return
+    }
+
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(room)
 }
 
+func getEmailFromCookie(r *http.Request) (string, error) {
+    cookie, err := r.Cookie("user_email") // Предполагаем, что email хранится в куке
+    if err != nil {
+        return "", err
+    }
+    return cookie.Value, nil
+}
+
+func roomExists(roomName, roomPassword string) (int, error) {
+    var roomID int
+    query := "SELECT id FROM rooms WHERE name = $1 AND password = $2" // Предполагается, что у вас есть таблица rooms
+    err := db.QueryRow(query, roomName, roomPassword).Scan(&roomID)
+    if err != nil {
+        return 0, err
+    }
+    return roomID, nil
+}
+
+func addUserToRoom(roomID int, email string) error {
+    query := "INSERT INTO room_users (room_id, user_email) VALUES ($1, $2)"
+    _, err := db.Exec(query, roomID, email)
+    return err
+}
 
 func joinRoom(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
-		return
-	}
+    log.Println("Запрос на:", r.URL.Path)
 
-	var roomData struct {
-		Name     string `json:"name"`
-		Password string `json:"password"`
-	}
+    if r.Method != http.MethodPost {
+        http.Error(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
+        return
+    }
 
-	err := json.NewDecoder(r.Body).Decode(&roomData)
-	if err != nil {
-		http.Error(w, "Ошибка при декодировании запроса: "+err.Error(), http.StatusBadRequest)
-		return
-	}
+    var req JoinRoomRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Ошибка декодирования данных: "+err.Error(), http.StatusBadRequest)
+        return
+    }
 
-	log.Printf("Попытка присоединиться к комнате: %s", roomData.Name)
+    email, err := getEmailFromCookie(r)
+    if err != nil {
+        log.Println("Ошибка получения email из куки:", err)
+        http.Error(w, "Необходима авторизация", http.StatusUnauthorized)
+        return
+    }
 
-	var storedHash string
-	err = db.QueryRow("SELECT password FROM rooms WHERE name = $1", roomData.Name).Scan(&storedHash)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Комната не найдена", http.StatusNotFound)
-			return
-		}
-		http.Error(w, "Ошибка получения данных: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
+    roomID, err := roomExists(req.Name, req.Password)
+    if err != nil {
+        log.Println("Комната не найдена:", err)
+        http.Error(w, "Комната не найдена", http.StatusNotFound)
+        return
+    }
 
-	if roomData.Password != storedHash { // Здесь нужно сравнивать хэшированный пароль
-		http.Error(w, "Неверный пароль", http.StatusUnauthorized)
-		return
-	}
+    if err := addUserToRoom(roomID, email); err != nil {
+        log.Println("Ошибка при добавлении в комнату:", err)
+        http.Error(w, "Ошибка при добавлении пользователя в комнату", http.StatusInternalServerError)
+        return
+    }
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Успешное присоединение"})
+    log.Printf("Пользователь %s присоединился к комнате %d", email, roomID)
+    w.WriteHeader(http.StatusOK)
 }
 
-func serveRoom(w http.ResponseWriter, r *http.Request) {
-    http.ServeFile(w, r, "D:/projects/webDocuments/Client/room.html") 
-}
+
+
 
 
 func main() {
@@ -299,14 +336,14 @@ func main() {
 
     clientDir := "../Client"
     http.Handle("/", http.FileServer(http.Dir(clientDir)))
-	http.HandleFunc("/register", createUser) // Обработка регистрации пользователей
-	http.HandleFunc("/login", loginUser)      // Обработка входа пользователей
-	http.HandleFunc("/ws", handleConnection)   // Обработка WebSocket-соединений
-	http.HandleFunc("/account", serveAccount) // Обработка страницы аккаунта
-	http.HandleFunc("/createRoom", createRoom) // Обработка создания комнаты
-    http.HandleFunc("/home", serveHome) // возвращаемся на первую страницу
-    http.HandleFunc("/joinRoom", joinRoom) // Обработка создания комнаты
-    http.HandleFunc("/room", serveRoom) // Обработка страницы комнаты
+	http.HandleFunc("/register", createUser) 
+	http.HandleFunc("/login", loginUser)      
+	http.HandleFunc("/ws", handleConnection)   
+	http.HandleFunc("/account", serveAccount) 
+	http.HandleFunc("/createRoom", createRoom) 
+    http.HandleFunc("/home", serveHome) 
+    http.HandleFunc("/joinRoom", joinRoom)
+
 
 	log.Println("Сервер запущен на порту 8080")
 	log.Fatal(http.ListenAndServe(":8080", nil)) // Запуск HTTP-сервера
