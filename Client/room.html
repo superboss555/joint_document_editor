@@ -21,6 +21,7 @@
             background-color: #fff;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             border-radius: 8px;
+            position: relative; /* Для абсолютного позиционирования списка пользователей */
         }
 
         h1 {
@@ -57,15 +58,53 @@
             font-size: 16px;
             resize: none; /* Запрет изменения размера */
         }
+
+        /* Стили для списка пользователей */
+        .user-list {
+            position: absolute; /* Абсолютное позиционирование */
+            top: 20px; /* Отступ сверху */
+            right: 20px; /* Отступ справа */
+            background-color: #fff; /* Фон списка */
+            border-radius: 4px; /* Скругление углов */
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Тень для списка */
+            padding: 10px; /* Поля внутри списка */
+            max-height: 200px; /* Максимальная высота списка */
+            overflow-y: auto; /* Прокрутка при переполнении */
+        }
+
+        .user-list h2 {
+            font-size: 18px; /* Размер шрифта заголовка списка пользователей */
+            margin-top: 0; /* Убираем верхний отступ */
+        }
+
+        .user-list ul {
+            list-style-type: none; /* Убираем маркеры у списка */
+            padding-left: 0; /* Убираем отступ слева */
+        }
+
+        .user-list li {
+            margin-bottom: 5px; /* Отступ между пользователями */
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Комната</h1>
+        
+        <!-- Список пользователей -->
+        <div class="user-list">
+            <h2>Пользователи:</h2>
+            <ul id="userList">
+                <!-- Пользователи будут добавляться сюда через JavaScript -->
+                <!-- Здесь будет динамически добавленный список пользователей -->
+            </ul>
+        </div>
+
         <div class="toolbar">
             <button class="button" onclick="saveDocument()">Сохранить</button>
             <button class="button" onclick="leaveRoom()">Выйти</button>
         </div>
+        
         <textarea class="text-area" placeholder="Введите текст здесь..."></textarea>
     </div>
 
@@ -79,6 +118,20 @@
                 window.location.href = "http://localhost:8080"; // Переход на главную страницу или другую
             }
         }
+
+        // Пример функции для добавления пользователя в список
+        function addUserToList(username) {
+           const userList = document.getElementById("userList");
+           const newUser = document.createElement("li");
+           newUser.textContent = username;
+           userList.appendChild(newUser);
+       }
+       
+       // Здесь можно добавить логику для получения списка пользователей из базы данных через API
+       // Например:
+       // fetch('/getUsersInRoom?name=roomName')
+       //     .then(response => response.json())
+       //     .then(users => users.forEach(addUserToList));
     </script>
 </body>
 </html>
